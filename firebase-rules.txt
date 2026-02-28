@@ -1,0 +1,63 @@
+// Firebase Firestore Rules
+// Copie essas regras para o Firebase Console > Firestore > Regras
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Função para verificar se o usuário é membro da família
+    function isUserMember(familyId) {
+      return exists(/databases/$(database)/documents/families/$(familyId)/members/$(request.auth.uid));
+    }
+
+    // Função para verificar se o usuário é admin da família
+    function isUserAdmin(familyId) {
+      return get(/databases/$(database)/documents/families/$(familyId)).data.adminId == request.auth.uid;
+    }
+
+    // Coleção de usuários
+    match /users/{userId} {
+      allow read: if request.auth.uid == userId;
+      allow write: if request.auth.uid == userId;
+      allow create: if request.auth.uid == resource.id;
+    }
+
+    // Coleção de famílias
+    match /families/{familyId} {
+      allow read: if isUserMember(familyId);
+      allow write: if isUserAdmin(familyId);
+      allow create: if request.auth.uid == request.resource.data.adminId;
+
+      // Membros da família
+      match /members/{memberId} {
+        allow read: if isUserMember(familyId);
+        allow write: if isUserAdmin(familyId);
+      }
+
+      // Transações
+      match /transactions/{transactionId} {
+        allow read: if isUserMember(familyId);
+        allow create: if isUserMember(familyId) && 
+                       request.resource.data.userId == request.auth.uid;
+        allow update, delete: if isUserMember(familyId) && 
+                               (request.resource.data.userId == request.auth.uid || 
+                                isUserAdmin(familyId));
+      }
+
+      // Cofrinhos (Savings Jars)
+      match /savingsJars/{jarId} {
+        allow read: if isUserMember(familyId);
+        allow write: if isUserAdmin(familyId);
+      }
+
+      // Empréstimos
+      match /loans/{loanId} {
+        allow read: if isUserMember(familyId);
+        allow create: if isUserMember(familyId) && 
+                       request.resource.data.lenderId == request.auth.uid;
+        allow update, delete: if isUserMember(familyId) && 
+                               (request.resource.data.lenderId == request.auth.uid || 
+                                isUserAdmin(familyId));
+      }
+    }
+  }
+}
